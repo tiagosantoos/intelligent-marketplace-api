@@ -12,7 +12,8 @@ commit específico para cada entrega.
 API HTTP em Python com FastAPI e Uvicorn. Inclui configuração por ambiente,
 conexão opcional ao PostgreSQL com SQLAlchemy, documentação OpenAPI e testes.
 Inclui nove tabelas históricas, controle técnico da carga e importador dos CSVs.
-Disponibiliza consultas de vendas por vendedor e atrasos por estado de destino.
+Disponibiliza consultas de vendas por vendedor, atrasos por estado e planos
+analíticos combináveis para vendas, atrasos, avaliações e tempo até o despacho.
 O Executivo possui uma primeira capacidade de análise histórica via OpenAI Agents
 SDK. Logístico, Jornada do Cliente e a orquestração entre agentes ainda não estão
 implementados. Migrações e importação são executadas separadamente da API.
@@ -301,6 +302,54 @@ usado pelos agentes.
 Os testes analíticos verificam pedidos com múltiplos itens e vendedores, filtros,
 taxas, denominadores e proteção contra escrita no PostgreSQL temporário.
 
+### Análises compostas pela IA
+
+`POST /api/v1/analytics/query` executa um plano analítico validado. O Executivo
+também pode construir esse plano pela ferramenta `marketplace_analysis`, sem
+depender de uma função diferente para cada pergunta. A IA escolhe o domínio,
+métricas, agrupamentos e filtros; o backend compila e calcula a consulta em SQL.
+
+| Domínio | Métricas disponíveis (além de `order_count`) |
+|---|---|
+| `delivery` | `late_order_count`, `late_rate_percent`, `avg_late_days`, `max_late_days`, `total_late_days` |
+| `sales` | `item_count`, `item_revenue` |
+| `reviews` | `review_count`, `avg_review_score`, `low_review_count`, `low_review_rate_percent` |
+| `dispatch` | `avg_dispatch_days`, `max_dispatch_days` |
+
+Até duas dimensões podem ser combinadas: `seller_id`, `seller_state`,
+`destination_state`, `product_category`, `purchase_month`, `order_status`. Uma
+lista vazia de dimensões retorna a análise global. Há filtros por vendedor,
+estados de origem/destino, categoria, status e período de compra. O ranking pode
+ser crescente ou decrescente por uma das métricas solicitadas, com até 50 grupos.
+`min_order_count` restringe a amostra por grupo (padrão 1).
+
+Exemplo: vendedores associados aos maiores atrasos individuais, em dias:
+
+```json
+{
+  "domain": "delivery",
+  "group_by": ["seller_id"],
+  "metrics": ["max_late_days", "avg_late_days", "late_order_count", "late_rate_percent"],
+  "sort_by": "max_late_days",
+  "limit": 5
+}
+```
+
+`order_count` é incluído em todos os planos para mostrar a amostra. Em `delivery`,
+conta pedidos entregues com datas válidas; a média de dias considera somente os
+atrasados. Em `sales`, conta pedidos com itens. Em `reviews`, conta pedidos com
+avaliações, enquanto taxas e médias usam cada avaliação: notas de 1 a 3 são
+consideradas baixas. Em `dispatch`, conta pedidos com despacho igual ou posterior
+à compra e calcula dias de 24 horas entre compra e despacho. Médias sem
+observações são nulas. Os status padrão são `delivered` em vendas e entregas,
+e todos os status em avaliações e despacho; `delivery` sempre exige `delivered`.
+
+As medidas de pedido e avaliação são deduplicadas antes das agregações por
+vendedor/categoria. Um pedido multivendedor pode pertencer a vários grupos;
+some grupos somente quando as populações forem disjuntas. Atraso ou avaliação
+associados a um vendedor não comprovam responsabilidade: o dataset registra
+entrega e despacho no nível do pedido, sem eventos de cada vendedor.
+
 ## Executivo: perguntas em linguagem natural
 
 Configure `OPENAI_API_KEY` e `OPENAI_MODEL` no `.env`, além do banco já migrado e
@@ -315,18 +364,24 @@ Envie `POST /api/v1/executive/messages` com o corpo:
 ```
 
 O Executivo interpreta a pergunta, escolhe a ferramenta e seus filtros, recebe os
-resultados calculados no PostgreSQL e elabora a resposta. Há duas ferramentas:
-`sales_by_seller` e `delays_by_state`, que reutilizam as definições e proteções das
-consultas históricas. Cada chamada abre sua própria sessão de leitura e a fecha
+resultados calculados no PostgreSQL e elabora a resposta. `marketplace_analysis`
+permite construir análises por vendedor, estado, categoria, mês ou status, nos
+quatro domínios. `sales_by_seller` e `delays_by_state` também permanecem disponíveis
+para consultas simples. Cada chamada abre sua própria sessão de leitura e a fecha
 antes de devolver o resultado ao modelo. O acesso ao banco não bloqueia o loop
 assíncrono da API.
 
 A resposta contém `answer` (explicação), `evidence` (relatórios efetivamente
-consultados, com filtros, origem e resultados) e `model`. As evidências são
+consultados e selecionados como suporte, com filtros/plano, origem e resultados)
+e `model`. O modelo devolve internamente uma resposta estruturada com os IDs das
+evidências utilizadas; o backend verifica as referências e devolve apenas esses
+relatórios, sem incluir automaticamente consultas irrelevantes. As evidências são
 coletadas pelo backend, não inventadas pelo modelo. A redação gerada continua
 sujeita à avaliação; o teste automatizado não comprova a qualidade de um modelo
-real. Perguntas fora das duas capacidades devem receber uma explicação da
-limitação. Consultas SQL livres e análises arbitrárias ainda não estão disponíveis.
+real. O agente pode fazer várias consultas para comparar períodos e rankings,
+e reformular um plano inválido a partir do retorno da ferramenta. Campos ausentes
+na origem, causalidade e previsões exigem evidências ou métodos adicionais.
+Não há SQL livre: as combinações usam o catálogo de métricas e dimensões acima.
 
 Cada requisição é independente, sem histórico de conversa ou memória persistente.
 O prompt está versionado em `agents/executive/assistant.py`. Ele orienta o agente
@@ -334,7 +389,7 @@ a fundamentar números nas ferramentas, distinguir quantidade de taxa e reconhec
 que o dataset é histórico. Esta etapa não implementa previsões, monitoramento
 operacional, ações logísticas nem comunicação entre os três agentes.
 
-A execução limita-se a seis turnos do SDK e 1500 tokens de saída por chamada do
+A execução limita-se a dez turnos do SDK e 1500 tokens de saída por chamada do
 modelo, com timeout total configurável. O cliente não faz retries automáticos.
 Tracing está desabilitado e as chamadas usam `store=false`. Perguntas e resultados
 agregados das ferramentas são enviados à OpenAI; os CSVs completos não são enviados.
@@ -362,7 +417,7 @@ Por padrão, não fazem chamadas a serviços externos.
 
 Os testes do Executivo usam modelo local simulado: não consomem créditos nem
 chamam a OpenAI. Com o banco de testes configurado, exercitam o Runner real do SDK,
-as duas ferramentas, as consultas SQL e a resposta HTTP com evidências. Também
+as ferramentas, as consultas SQL e a resposta HTTP com evidências. Também
 verificam configuração ausente, validação de entrada e erros sanitizados.
 
 Para executar os testes de integração, configure `TEST_DATABASE_URL` para um

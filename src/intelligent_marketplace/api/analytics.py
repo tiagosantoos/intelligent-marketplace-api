@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from intelligent_marketplace.infrastructure.database import get_analytics_session
+from intelligent_marketplace.services.analysis_plan import AnalysisPlan, AnalysisReport, analyze_marketplace
 from intelligent_marketplace.services.analytics import (
     DeliveryStateFilter,
     DeliveryStateReport,
@@ -20,6 +21,12 @@ router = APIRouter(
     responses={503: {"description": "Banco não configurado ou consulta indisponível"}},
 )
 ReadSession = Annotated[Session, Depends(get_analytics_session)]
+
+
+@router.post("/query", response_model=AnalysisReport, summary="Executar um plano analítico")
+def query(plan: AnalysisPlan, session: ReadSession):
+    """Combina dimensões, métricas e filtros, sem aceitar SQL do cliente."""
+    return analyze_marketplace(session, plan)
 
 
 @router.get("/sellers", response_model=SellerSalesReport, summary="Consultar vendas por vendedor")

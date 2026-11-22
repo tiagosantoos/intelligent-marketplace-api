@@ -16,6 +16,7 @@ from test_analytics import analytics_session
 from intelligent_marketplace.agents.executive import assistant
 from intelligent_marketplace.core.config import Settings
 from intelligent_marketplace.main import create_app
+from intelligent_marketplace.services.analysis_plan import AnalysisPlan
 
 
 @pytest.fixture
@@ -93,7 +94,8 @@ class ScriptedModel(Model):
             results = [json.loads(item["output"]) for item in input if item.get("type") == "function_call_output"]
             assert results[0]["data"][0]["order_count"] == 4
             assert results[1]["data"][0]["late_order_count"] == 2
-            output = [ResponseOutputMessage(id="message1", role="assistant", status="completed", type="message", content=[ResponseOutputText(type="output_text", text="O vendedor A teve 4 pedidos. RJ teve 2 entregas atrasadas entre 3 elegíveis.", annotations=[])])]
+            final = {"answer": "O vendedor A teve 4 pedidos. RJ teve 2 entregas atrasadas entre 3 elegíveis.", "evidence_ids": [1, 2]}
+            output = [ResponseOutputMessage(id="message1", role="assistant", status="completed", type="message", content=[ResponseOutputText(type="output_text", text=json.dumps(final), annotations=[])])]
         return ModelResponse(output=output, usage=Usage(), response_id=f"response{self.calls}")
 
     async def stream_response(self, *args, **kwargs):
@@ -123,3 +125,66 @@ async def test_real_runner_tools_database_and_http_response(analytics_session, a
     assert body["evidence"][0]["data"][0]["seller_id"] == "A"
     assert body["evidence"][1]["data"][0]["late_rate_percent"] == "66.67"
     assert "4 pedidos" in body["answer"]
+
+
+class SellerDelayModel(ScriptedModel):
+    async def get_response(self, system_instructions, input, model_settings, tools, output_schema, handoffs, tracing, **kwargs):
+        if self.calls == 0:
+            return await super().get_response(system_instructions, input, model_settings, tools, output_schema, handoffs, tracing, **kwargs)
+        self.calls += 1
+        if self.calls == 2:
+            plan = AnalysisPlan(domain="delivery", group_by=["seller_id"], metrics=["late_order_count", "late_rate_percent", "max_late_days", "avg_late_days"], sort_by="late_order_count", limit=1)
+            output = [ResponseFunctionToolCall(id="flex1", call_id="flex1", name="marketplace_analysis", arguments=json.dumps({"plan": plan.model_dump(mode="json")}), type="function_call")]
+        else:
+            reports = [json.loads(item["output"]) for item in input if item.get("type") == "function_call_output"]
+            assert reports[-1]["data"][0]["late_order_count"] == 2
+            final = {"answer": "O vendedor A está associado a 2 pedidos atrasados entre 3 elegíveis (66,67%). Isso não comprova responsabilidade pelo atraso.", "evidence_ids": [reports[-1]["evidence_id"]]}
+            output = [ResponseOutputMessage(id="final", role="assistant", status="completed", type="message", content=[ResponseOutputText(type="output_text", text=json.dumps(final), annotations=[])])]
+        return ModelResponse(output=output, usage=Usage(), response_id=f"flex-response-{self.calls}")
+
+
+class RecoveringPlanModel(SellerDelayModel):
+    async def get_response(self, system_instructions, input, model_settings, tools, output_schema, handoffs, tracing, **kwargs):
+        if self.calls == 0:
+            self.calls = 1
+            plan = AnalysisPlan(domain="sales", metrics=["item_revenue"], sort_by="item_revenue").model_dump(mode="json")
+            plan["domain"] = "delivery"  # Deve ser recusado sem executar SQL e permitir correção.
+            output = [ResponseFunctionToolCall(id="invalid", call_id="invalid", name="marketplace_analysis", arguments=json.dumps({"plan": plan}), type="function_call")]
+            return ModelResponse(output=output, usage=Usage(), response_id="invalid-response")
+        if self.calls == 1:
+            outputs = [json.loads(item["output"]) for item in input if item.get("type") == "function_call_output"]
+            assert outputs[-1]["error"] == "invalid_analysis_plan"
+        return await super().get_response(system_instructions, input, model_settings, tools, output_schema, handoffs, tracing, **kwargs)
+
+
+@pytest.mark.integration
+@pytest.mark.anyio
+@pytest.mark.parametrize("model_type", [SellerDelayModel, RecoveringPlanModel])
+async def test_flexible_tool_answers_seller_delay_and_excludes_irrelevant_evidence(analytics_session, ai_settings, monkeypatch, model_type):
+    @contextmanager
+    def transactional_session(database, settings):
+        yield analytics_session
+
+    model = model_type()
+    monkeypatch.setattr(assistant, "analytics_session", transactional_session)
+    monkeypatch.setattr(assistant, "OpenAIProvider", lambda **kwargs: SimpleNamespace(get_model=lambda name: model))
+    app = create_app(ai_settings)
+    app.state.database.session_factory = object()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/v1/executive/messages", json={"question": "Qual vendedor tem mais pedidos atrasados?"})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["evidence"]) == 1
+    assert body["evidence"][0]["plan"]["domain"] == "delivery"
+    assert body["evidence"][0]["data"][0]["late_order_count"] == 2
+    assert "66,67%" in body["answer"]
+
+
+@pytest.mark.anyio
+async def test_invented_evidence_reference_is_rejected(ai_settings, monkeypatch):
+    app = create_app(ai_settings)
+    app.state.database.session_factory = object()
+    monkeypatch.setattr(assistant.Runner, "run", AsyncMock(return_value=SimpleNamespace(final_output=assistant.ExecutiveDecision(answer="Answer", evidence_ids=[1]))))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/v1/executive/messages", json={"question": "Analise atrasos"})
+    assert response.status_code == 502
