@@ -49,7 +49,7 @@ precisam de avaliação registrada com o modelo real.
 2. Para avaliar um modelo real, use uma instância separada e uma base de avaliação
    persistida com os mesmos dados sintéticos. As fixtures transacionais dos testes
    não ficam disponíveis para uma API em outro processo. Essa carga de avaliação
-   ainda não tem comando próprio.
+   pode ser criada pelo comando de avaliação abaixo, sem alterar a base local.
 3. Envie as perguntas a `POST /api/v1/executive/messages`. Compare a resposta e
    os relatórios com os resultados esperados. O modelo não deve receber o gabarito.
 4. Registre cada execução usando o modelo abaixo. Mudanças no prompt, modelo,
@@ -63,16 +63,52 @@ precisam de avaliação registrada com o modelo real.
 | `dataset_version` | Fixture/variação ou checksums da carga usada |
 | `question` | Pergunta enviada, sem credenciais ou dados desnecessários |
 | `answer` / `evidence` | Resposta e relatórios retornados pela API |
-| `result` | `passed`, `failed` ou `not_run` |
+| `result` | `passed`, `failed`, `not_run` ou `needs_review` (executado, aguardando revisão) |
 | `failure_reason` | Métrica, população, número, evidência, redação ou segurança incorretos |
 | `reviewer` | Responsável pela avaliação |
 
-Estado inicial desta matriz: **avaliação real `not_run`**. Resultados observados
+Estado inicial desta matriz: **avaliação real `not_run`**. O comando registra
+`needs_review` quando houve resposta HTTP 200 ainda não revisada; isso não é
+aprovação. Resultados observados
 informalmente no Swagger não substituem um registro com pergunta, versão e
 evidências. Os testes automatizados existentes estão em
 [test_flexible_analytics.py](../tests/test_flexible_analytics.py),
 [test_analytics.py](../tests/test_analytics.py) e
 [test_executive.py](../tests/test_executive.py).
+
+### Comando reproduzível de avaliação real
+
+Crie um PostgreSQL local exclusivo, vazio e com nome terminado em `_eval`. Defina
+`EVALUATION_DATABASE_URL` somente no processo de avaliação; o comando nunca usa
+`DATABASE_URL` como destino da carga sintética. Chave e modelo vêm do `.env`.
+
+```powershell
+$env:EVALUATION_DATABASE_URL = "postgresql+psycopg://usuario:senha@127.0.0.1:PORTA/marketplace_eval"
+uv run python scripts/evaluate_executive.py --allow-openai
+```
+
+`--allow-openai` explicita execução com custo. `--cases V02,V04` limita as
+perguntas; o padrão são 14 cenários de linguagem natural. A execução chama a rota
+HTTP via transporte ASGI no processo, com Runner, modelo e PostgreSQL reais; não
+exige um segundo servidor ouvindo uma porta. Somente perguntas e resultados
+sintéticos são enviados ao provedor; os gabaritos ficam no relatório local.
+
+O comando aplica migrações e insere sete pedidos fictícios, três avaliações e
+datas de despacho controladas. Apenas V05 altera temporariamente uma data de
+entrega para testar o ranking por duração e a restaura ao final do caso. Hashes
+da base antes/depois verificam ausência de alterações residuais. Um banco já
+preparado é recusado; use outro banco vazio na repetição, sem apagar dados reais.
+
+Os JSONs são gravados incrementalmente em `data/evaluations/` (fora do Git), com
+commit, hashes dos fontes, modelo, horários, latência, perguntas, respostas,
+evidências, gabarito e estado de revisão. `--output-dir` permite outra pasta.
+Uma execução por pergunta não comprova estabilidade estatística nem mede custo.
+V03 e V04 têm formulação explícita de entrega/vendedor no comando porque cada
+requisição é independente e não recebe contexto de conversa anterior.
+
+V14, V15, V16 e V18 permanecem associados aos testes de contrato; não são enviados
+como perguntas ao modelo nem marcados como aprovados por este comando. Revise os
+relatórios para decidir `passed` ou `failed` e registre responsável e justificativa.
 
 ## Critérios para aceitar uma execução
 
