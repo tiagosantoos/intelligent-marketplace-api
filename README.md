@@ -9,9 +9,9 @@ commit específico para cada entrega.
 
 ## Estado atual
 
-API HTTP inicial em Python com FastAPI e Uvicorn. Inclui um endpoint de saúde,
-documentação OpenAPI, configuração por ambiente e testes locais. Banco e agentes ainda não estão
-implementados. Não é necessário configurar credenciais para executar esta etapa.
+API HTTP em Python com FastAPI e Uvicorn. Inclui configuração por ambiente,
+conexão opcional ao PostgreSQL com SQLAlchemy, documentação OpenAPI e testes.
+Não há tabelas, importação do dataset ou agentes implementados nesta etapa.
 
 ## Executar localmente
 
@@ -37,6 +37,8 @@ O `.env` é local e não entra no Git.
 | `APP_NAME` | `Intelligent Marketplace API` | Nome exibido na documentação |
 | `APP_ENV` | `development` | Identificação do ambiente: `development`, `test` ou `production` |
 | `DOCS_ENABLED` | `true` | Habilitar `/docs`, `/redoc` e `/openapi.json` |
+| `DATABASE_URL` | Não configurada | URL `postgresql+psycopg://usuario:senha@host:porta/banco` |
+| `DATABASE_CONNECT_TIMEOUT_SECONDS` | `5` | Limite de conexão e espera pelo pool, de 1 a 30 segundos |
 
 As variáveis do processo prevalecem sobre o `.env`; valores não definidos usam o
 padrão. O `.env` é procurado no diretório de execução, por isso inicie a API pela
@@ -50,6 +52,7 @@ automaticamente. `DOCS_ENABLED=false` desabilita somente a documentação, mante
 | Endereço | Finalidade |
 |---|---|
 | `http://127.0.0.1:8000/health` | Disponibilidade do processo HTTP |
+| `http://127.0.0.1:8000/health/ready` | Conexão disponível com o PostgreSQL |
 | `http://127.0.0.1:8000/docs` | Documentação interativa da API |
 | `http://127.0.0.1:8000/openapi.json` | Contrato OpenAPI para integrações futuras |
 
@@ -62,6 +65,49 @@ Resposta de `GET /health`:
 Esse endpoint confirma somente que a API está respondendo. Não representa
 disponibilidade de banco, agentes ou outros serviços.
 
+## PostgreSQL local
+
+Com Docker Desktop em execução, suba somente o banco:
+
+```sh
+docker compose up -d postgres
+```
+
+O `compose.yaml` usa PostgreSQL 16, acessível apenas em `127.0.0.1:5432`, com
+volume persistente. Usuário, senha e banco locais são `marketplace`; esses valores
+destinam-se exclusivamente ao desenvolvimento local.
+
+Defina no seu `.env`:
+
+```dotenv
+DATABASE_URL=postgresql+psycopg://marketplace:marketplace@localhost:5432/marketplace
+DATABASE_CONNECT_TIMEOUT_SECONDS=5
+```
+
+Reinicie a API e consulte `/health/ready`. Com conexão disponível, a resposta será:
+
+```json
+{"status": "ready", "database": "connected"}
+```
+
+Sem `DATABASE_URL`, ou se o banco estiver indisponível, esse endpoint retorna
+HTTP 503. `/health` continua respondendo sem depender do banco. A inicialização
+não abre conexões nem cria tabelas; o acesso ocorre sob demanda.
+
+O pool pertence à aplicação e é liberado no encerramento. As futuras rotas poderão
+obter uma sessão por requisição através de `get_session`; os serviços precisarão
+confirmar explicitamente suas transações. O fechamento da sessão descarta trabalho
+não confirmado.
+
+Para um banco hospedado, utilize credenciais próprias e os parâmetros TLS exigidos
+pelo provedor. Senhas com caracteres reservados devem ser codificadas para URL.
+Não publique a URL real. A configuração protege a representação da senha e os
+erros HTTP de conexão não expõem detalhes do driver.
+
+`/health/ready` verifica somente `SELECT 1`, não a existência dos schemas e tabelas.
+Migrações, os schemas `historical` e `application`, importação e ferramentas
+analíticas terão etapas próprias. Nenhuma consulta dinâmica de IA foi liberada.
+
 ## Verificar
 
 ```sh
@@ -70,7 +116,19 @@ uv run pytest
 
 Os testes verificam a resposta HTTP, o contrato do endpoint, a leitura das
 configurações, a precedência das variáveis e a desativação da documentação.
-Não fazem chamadas de rede externas.
+Também cobrem conexão não configurada, tratamento de falhas, sessões e encerramento.
+Por padrão, não fazem chamadas a serviços externos.
+
+Para verificar uma conexão real, configure `TEST_DATABASE_URL` explicitamente.
+Exemplo no PowerShell para o PostgreSQL local:
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql+psycopg://marketplace:marketplace@localhost:5432/marketplace"
+uv run pytest -m integration
+```
+
+O teste de integração executa apenas `SELECT 1`; não cria ou apaga dados. Sem essa
+variável, ele é marcado como ignorado. Os demais testes não dependem do Docker.
 
 ## Estrutura
 
@@ -86,20 +144,21 @@ intelligent-marketplace-api/
 │       │   └── logistics/          # Logístico
 │       ├── api/                    # Rotas HTTP, incluindo GET /health
 │       ├── core/                   # Configurações compartilhadas
-│       ├── infrastructure/         # Persistência e integrações externas
+│       ├── infrastructure/         # Conexões e sessões em database.py
 │       └── services/               # Casos de uso da aplicação
 ├── tests/                          # Testes do backend
 ├── .editorconfig
 ├── .env.example                    # Exemplo de configuração sem segredos
 ├── .gitattributes
 ├── .gitignore
+├── compose.yaml                    # PostgreSQL para desenvolvimento local
 ├── pyproject.toml
 ├── uv.lock                         # Versões resolvidas das dependências
 └── README.md
 ```
 
-Os diretórios de agentes, serviços e infraestrutura reservam responsabilidades
-para etapas posteriores. O projeto não depende de arquivos fora desta pasta.
+Os diretórios de agentes e serviços reservam responsabilidades para etapas
+posteriores. O projeto não depende de arquivos fora desta pasta.
 
 ## Convenções
 
@@ -112,5 +171,5 @@ para etapas posteriores. O projeto não depende de arquivos fora desta pasta.
 
 ## Próximo passo
 
-Definir a configuração e a conexão com o banco de dados. Modelos de negócio,
-agentes e hospedagem terão etapas próprias, com commits separados.
+Definir as migrações e as tabelas do histórico. Importador, consultas analíticas,
+modelos de acompanhamento e agentes terão commits separados.

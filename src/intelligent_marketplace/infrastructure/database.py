@@ -1,0 +1,58 @@
+"""Conexões e sessões PostgreSQL, sem criação automática de tabelas."""
+
+from collections.abc import Iterator
+
+from fastapi import HTTPException, Request
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from intelligent_marketplace.core.config import Settings
+
+
+class DatabaseNotConfiguredError(RuntimeError):
+    """Não há conexão configurada para esta aplicação."""
+
+
+class Database:
+    def __init__(self, settings: Settings):
+        self.engine: Engine | None = None
+        self.session_factory: sessionmaker[Session] | None = None
+        if settings.database_url is not None:
+            timeout = settings.database_connect_timeout_seconds
+            self.engine = create_engine(
+                settings.database_url.get_secret_value(),
+                pool_pre_ping=True,
+                pool_size=5,
+                max_overflow=5,
+                pool_timeout=timeout,
+                connect_args={"connect_timeout": timeout},
+                hide_parameters=True,
+            )
+            self.session_factory = sessionmaker(
+                bind=self.engine, autoflush=False, expire_on_commit=False
+            )
+
+    def check_connection(self) -> None:
+        """Executa uma consulta sem modificar dados. O engine conecta sob demanda."""
+        if self.engine is None:
+            raise DatabaseNotConfiguredError
+        with self.engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+
+    def dispose(self) -> None:
+        if self.engine is not None:
+            self.engine.dispose()
+
+
+def get_database(request: Request) -> Database:
+    return request.app.state.database
+
+
+def get_session(request: Request) -> Iterator[Session]:
+    """Sessão por requisição. O serviço decide quando confirmar uma transação."""
+    database = get_database(request)
+    if database.session_factory is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    with database.session_factory() as session:
+        yield session

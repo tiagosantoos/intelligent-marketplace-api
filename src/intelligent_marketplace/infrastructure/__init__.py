@@ -1,1 +1,1 @@
-"""Persistência e integrações: implementação em etapa posterior."""
+"""Persistência e integrações externas."""

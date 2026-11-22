@@ -8,7 +8,10 @@ from intelligent_marketplace.main import create_app
 
 @pytest.fixture(autouse=True)
 def clear_settings_environment(monkeypatch):
-    for name in ("APP_NAME", "APP_ENV", "DOCS_ENABLED"):
+    for name in (
+        "APP_NAME", "APP_ENV", "DOCS_ENABLED", "DATABASE_URL",
+        "DATABASE_CONNECT_TIMEOUT_SECONDS",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -18,6 +21,7 @@ def test_defaults_work_without_env_file():
     assert settings.app_name == "Intelligent Marketplace API"
     assert settings.app_env == "development"
     assert settings.docs_enabled is True
+    assert settings.database_url is None
 
 
 def test_environment_overrides_dotenv(tmp_path, monkeypatch):
@@ -53,6 +57,7 @@ async def test_custom_title_and_disabled_docs_keep_health_available():
         app_name="Configured API",
         app_env="test",
         docs_enabled=False,
+        database_url=None,
     )
     app = create_app(settings)
 
