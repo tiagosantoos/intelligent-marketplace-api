@@ -490,12 +490,15 @@ O projeto não depende de arquivos fora desta pasta.
   prompt, cobertura existente e lacunas pendentes.
 - [Cenários de validação](docs/validation-scenarios.md): perguntas, resultados
   esperados, critérios de aceitação e registro de avaliações do modelo real.
+- [Avaliação real de 22/11/2026](docs/evaluations/2026-11-22-review.md): duas rodadas
+  de 14 perguntas sintéticas, falhas observadas, ajuste do prompt e reavaliação.
 
 Os testes com modelo simulado verificam integração e contratos; a validação
 semântica das respostas de um modelo real permanece uma etapa distinta.
 
 ## Próximo passo
 
-Validar perguntas e respostas do Executivo com um modelo real configurado.
-Ampliar a capacidade analítica e implementar os agentes especialistas e sua
-orquestração em commits separados.
+Definir o primeiro fluxo do Agente Logístico, aproveitando os indicadores
+validados e distinguindo análise histórica de previsão de risco. A validação do
+Executivo deve continuar com mais formulações e revisão humana; as duas rodadas
+exploratórias registradas não demonstram robustez geral.

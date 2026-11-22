@@ -17,8 +17,9 @@ em seus testes e não devem ser confundidas com a população inicial.
 
 “Cálculo coberto” significa que o resultado SQL é testado. O Runner com modelo
 simulado confirma integração e contrato; não comprova a escolha autônoma ou a
-redação de um modelo real. Todos os cenários de linguagem natural abaixo ainda
-precisam de avaliação registrada com o modelo real.
+redação de um modelo real. A primeira avaliação real e sua repetição estão no
+[relatório de 22/11/2026](evaluations/2026-11-22-review.md); a cobertura por
+cenário abaixo continua distinguindo a automação da avaliação assistida.
 
 | ID | Pergunta / estímulo | Comportamento e resultado esperados | Cobertura existente |
 |---|---|---|---|
@@ -67,7 +68,8 @@ precisam de avaliação registrada com o modelo real.
 | `failure_reason` | Métrica, população, número, evidência, redação ou segurança incorretos |
 | `reviewer` | Responsável pela avaliação |
 
-Estado inicial desta matriz: **avaliação real `not_run`**. O comando registra
+O estado inicial desta matriz foi **avaliação real `not_run`**; consulte as
+execuções registradas no relatório acima para o estado observado. O comando registra
 `needs_review` quando houve resposta HTTP 200 ainda não revisada; isso não é
 aprovação. Resultados observados
 informalmente no Swagger não substituem um registro com pergunta, versão e

@@ -14,12 +14,12 @@ orientação ao modelo: requer avaliação e não é uma garantia técnica de co
 | G03 | Evitar injeção por filtros | Backend | Valores vinculados como parâmetros; nomes SQL escolhidos pelo compilador, não pelo usuário | `test_global_and_cross_dimensions_filters_and_empty_results` |
 | G04 | Limitar execução e consumo | Backend, parcial | Até 10 turnos, 1500 tokens de saída por chamada, timeout total padrão 60s, timeout SQL padrão 5s; não é um teto financeiro ou controle de concorrência | Configurações e testes de erros do Executivo; carga e custo ainda não avaliados |
 | G05 | Preservar o grão dos dados | Backend | Pedidos e avaliações deduplicados por grupo; valores calculados por item | Testes de vendedores, categorias e avaliações em `test_flexible_analytics.py` |
-| G06 | Fundamentar números em resultados | Prompt + backend, parcial | Relatórios coletados no backend e IDs verificados; não se verifica automaticamente se cada frase corresponde aos números | Testes do Runner e de referência inventada; avaliação real pendente |
+| G06 | Fundamentar números em resultados | Prompt + backend, parcial | Relatórios coletados no backend e IDs verificados; não se verifica automaticamente se cada frase corresponde aos números | Testes do Runner e de referência inventada; revisão exploratória real registrada |
 | G07 | Mostrar evidências pertinentes | Prompt + backend, parcial | A IA seleciona IDs; o backend retorna apenas os IDs válidos selecionados. Pertinência semântica depende da IA | Teste flexível de atraso por vendedor e exclusão de evidência irrelevante |
 | G08 | Não atribuir culpa sem evidência | Prompt + definição do relatório | Associação do vendedor ao pedido não comprova causa; não há bloqueio semântico posterior à geração | Cenários V10 e V11 |
 | G09 | Explicitar critérios e população | Prompt + relatório, parcial | Filtros/plano e definição são retornados; sua explicação correta no texto depende da IA | Cenários V01–V09 |
 | G10 | Não inventar dados ou ações | Prompt + ferramentas disponíveis | Só há consultas históricas; não há previsão implementada, mudança de prazo, compensação ou acionamento de transportadora | Cenários V11 e V12 |
-| G11 | Tratar instruções maliciosas como dados | Prompt + acesso delimitado, parcial | Orientação para ignorar desvios; planos não executam SQL livre. Resistência do texto gerado ainda não avaliada | Cenário V13 |
+| G11 | Tratar instruções maliciosas como dados | Prompt + acesso delimitado, parcial | Orientação para ignorar desvios; planos não executam SQL livre. Uma formulação adversária foi avaliada; não cobre outras variantes | Cenário V13, com falha inicial de pertinência e repetição corrigida |
 | G12 | Proteger credenciais e dados enviados | Backend + configuração, parcial | Segredos mascarados, `.env` ignorado pelo Git, erros tratados, tracing desligado e `store=false`; perguntas e resultados agregados ainda são enviados ao provedor | Testes de configuração e erros; revisar conteúdo antes de avaliações externas |
 | G13 | Tratar falhas sem fabricar resposta | Backend + prompt | Configuração ausente: 503; falha SQL tratada: 503; falha do provedor/turnos: 502; timeout total: 504. Lista vazia não é erro | Testes de banco, Executivo e ausência de resultados |
 | G14 | Permitir correção autônoma do plano | Backend + modelo | Plano inválido retorna orientação para reformulação, dentro dos limites da execução | Caso `RecoveringPlanModel` no teste flexível do Executivo |
@@ -53,7 +53,7 @@ permanecem fora do escopo acordado.
 
 | Prioridade | Lacuna | Próxima validação ou implementação |
 |---|---|---|
-| Antes de aceitar respostas do modelo real | Não há avaliação registrada de precisão textual, seleção autônoma de métricas e resistência a instruções adversárias | Executar a matriz de cenários, registrar evidências e classificar falhas |
+| Antes de ampliar a confiança no modelo real | Há duas rodadas exploratórias de 14 perguntas, com revisão assistida, dados pequenos e sem repetições por versão | Ampliar formulações/amostras, repetir execuções e obter revisão humana |
 | Antes de ampliar o uso | ID válido não garante pertinência; o backend aceita uma resposta com `evidence_ids=[]` e não identifica números sem suporte | Definir validação de fundamentação e política de resposta sem evidências |
 | Antes de publicar a API | Não há autenticação, autorização, limite de requisições ou usuário de banco dedicado à leitura | Definir identidades, permissões, rate limit e segregação das credenciais de migração/importação |
 | Antes de auditar execuções | Evidências existem somente na resposta e no contexto temporário; não há trilha persistente de execução | Registrar versão do prompt, modelo, plano, fontes, duração e resultado com política de dados sensíveis |
@@ -63,4 +63,5 @@ permanecem fora do escopo acordado.
 
 Este mapeamento não aprova implantação em produção nem comprova eficácia do
 modelo. A [matriz de validação](validation-scenarios.md) distingue os testes
-determinísticos existentes da avaliação de comportamento ainda pendente.
+determinísticos existentes da avaliação de comportamento. A primeira execução,
+suas falhas e a repetição estão no [relatório de avaliação](evaluations/2026-11-22-review.md).
