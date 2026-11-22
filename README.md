@@ -492,13 +492,15 @@ O projeto não depende de arquivos fora desta pasta.
   esperados, critérios de aceitação e registro de avaliações do modelo real.
 - [Avaliação real de 22/11/2026](docs/evaluations/2026-11-22-review.md): duas rodadas
   de 14 perguntas sintéticas, falhas observadas, ajuste do prompt e reavaliação.
+- [Primeiro fluxo do Agente Logístico](docs/logistics-operating-flow.md): entradas,
+  acompanhamento, atuação da IA, saídas para o Executivo e ordem de implementação.
 
 Os testes com modelo simulado verificam integração e contratos; a validação
 semântica das respostas de um modelo real permanece uma etapa distinta.
 
 ## Próximo passo
 
-Definir o primeiro fluxo do Agente Logístico, aproveitando os indicadores
-validados e distinguindo análise histórica de previsão de risco. A validação do
+Implementar os contratos de entrada/saída e a conferência factual do snapshot do
+Agente Logístico, conforme seu fluxo operacional documentado. A validação do
 Executivo deve continuar com mais formulações e revisão humana; as duas rodadas
 exploratórias registradas não demonstram robustez geral.
