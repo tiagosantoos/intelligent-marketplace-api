@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from intelligent_marketplace.api.health import router as health_router
 from intelligent_marketplace.api.analytics import router as analytics_router
+from intelligent_marketplace.api.executive import router as executive_router
 from intelligent_marketplace.core.config import Settings
 from intelligent_marketplace.infrastructure.database import Database
 
@@ -37,6 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.database = database
     application.include_router(health_router)
     application.include_router(analytics_router)
+    application.include_router(executive_router)
     return application
 
 

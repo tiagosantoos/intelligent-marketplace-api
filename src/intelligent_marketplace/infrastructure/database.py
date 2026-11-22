@@ -1,6 +1,7 @@
 """Conexões e sessões PostgreSQL, sem criação automática de tabelas."""
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 from fastapi import HTTPException, Request
 from sqlalchemy import create_engine, text
@@ -61,7 +62,13 @@ def get_session(request: Request) -> Iterator[Session]:
 
 def get_analytics_session(request: Request) -> Iterator[Session]:
     """Transação de leitura com timeout, também obrigatório para ferramentas futuras."""
-    database = get_database(request)
+    with analytics_session(get_database(request), request.app.state.settings) as session:
+        yield session
+
+
+@contextmanager
+def analytics_session(database: Database, settings: Settings) -> Iterator[Session]:
+    """Compartilha as mesmas proteções entre as rotas HTTP e as ferramentas de IA."""
     if database.session_factory is None:
         raise HTTPException(status_code=503, detail="Database is not configured")
     try:
@@ -70,7 +77,7 @@ def get_analytics_session(request: Request) -> Iterator[Session]:
                 session.execute(text("SET TRANSACTION READ ONLY"))
                 session.execute(
                     text("SELECT set_config('statement_timeout', :timeout, true)"),
-                    {"timeout": f"{request.app.state.settings.analytics_query_timeout_seconds}s"},
+                    {"timeout": f"{settings.analytics_query_timeout_seconds}s"},
                 )
                 yield session
     except SQLAlchemyError:

@@ -13,8 +13,9 @@ API HTTP em Python com FastAPI e Uvicorn. Inclui configuração por ambiente,
 conexão opcional ao PostgreSQL com SQLAlchemy, documentação OpenAPI e testes.
 Inclui nove tabelas históricas, controle técnico da carga e importador dos CSVs.
 Disponibiliza consultas de vendas por vendedor e atrasos por estado de destino.
-Os agentes ainda não estão implementados. Migrações e importação são executadas
-separadamente da API.
+O Executivo possui uma primeira capacidade de análise histórica via OpenAI Agents
+SDK. Logístico, Jornada do Cliente e a orquestração entre agentes ainda não estão
+implementados. Migrações e importação são executadas separadamente da API.
 
 ## Executar localmente
 
@@ -43,6 +44,9 @@ O `.env` é local e não entra no Git.
 | `DATABASE_URL` | Não configurada | URL `postgresql+psycopg://usuario:senha@host:porta/banco` |
 | `DATABASE_CONNECT_TIMEOUT_SECONDS` | `5` | Limite de conexão e espera pelo pool, de 1 a 30 segundos |
 | `ANALYTICS_QUERY_TIMEOUT_SECONDS` | `5` | Limite por comando analítico no PostgreSQL, de 1 a 30 segundos |
+| `OPENAI_API_KEY` | Não configurada | Chave secreta da API OpenAI |
+| `OPENAI_MODEL` | Não configurado | Identificador do modelo com suporte a ferramentas disponível na conta |
+| `AGENT_TIMEOUT_SECONDS` | `60` | Limite total da execução do agente, de 1 a 120 segundos |
 
 As variáveis do processo prevalecem sobre o `.env`; valores não definidos usam o
 padrão. O `.env` é procurado no diretório de execução, por isso inicie a API pela
@@ -109,7 +113,7 @@ Não publique a URL real. A configuração protege a representação da senha e 
 erros HTTP de conexão não expõem detalhes do driver.
 
 `/health/ready` verifica somente `SELECT 1`, não a existência dos schemas e tabelas.
-Nenhuma consulta dinâmica de IA foi liberada.
+O Executivo usa ferramentas delimitadas; não há execução de SQL gerado pela IA.
 
 ## Migrações e tabelas históricas
 
@@ -290,13 +294,59 @@ Exemplos:
 Valores decimais são strings JSON para preservar precisão. As consultas usam
 parâmetros validados, transações somente de leitura e timeout local por comando.
 Não aceitam SQL fornecido pelo cliente. Essas rotas estabelecem definições
-verificáveis para futuras ferramentas dos agentes; ainda não há IA ou perguntas
-em linguagem natural implementadas. A API local ainda não tem autenticação;
+verificáveis para as ferramentas do Executivo. A API local ainda não tem autenticação;
 a integração futura deverá definir os acessos e permissões do usuário de banco
 usado pelos agentes.
 
 Os testes analíticos verificam pedidos com múltiplos itens e vendedores, filtros,
 taxas, denominadores e proteção contra escrita no PostgreSQL temporário.
+
+## Executivo: perguntas em linguagem natural
+
+Configure `OPENAI_API_KEY` e `OPENAI_MODEL` no `.env`, além do banco já migrado e
+carregado. O modelo é uma escolha explícita de configuração; não há modelo padrão
+nem chamada externa na inicialização. Não publique sua chave no Git. A assinatura
+do ChatGPT não configura automaticamente as credenciais desta aplicação.
+
+Envie `POST /api/v1/executive/messages` com o corpo:
+
+```json
+{"question": "Qual estado concentrou mais entregas atrasadas em 2018?"}
+```
+
+O Executivo interpreta a pergunta, escolhe a ferramenta e seus filtros, recebe os
+resultados calculados no PostgreSQL e elabora a resposta. Há duas ferramentas:
+`sales_by_seller` e `delays_by_state`, que reutilizam as definições e proteções das
+consultas históricas. Cada chamada abre sua própria sessão de leitura e a fecha
+antes de devolver o resultado ao modelo. O acesso ao banco não bloqueia o loop
+assíncrono da API.
+
+A resposta contém `answer` (explicação), `evidence` (relatórios efetivamente
+consultados, com filtros, origem e resultados) e `model`. As evidências são
+coletadas pelo backend, não inventadas pelo modelo. A redação gerada continua
+sujeita à avaliação; o teste automatizado não comprova a qualidade de um modelo
+real. Perguntas fora das duas capacidades devem receber uma explicação da
+limitação. Consultas SQL livres e análises arbitrárias ainda não estão disponíveis.
+
+Cada requisição é independente, sem histórico de conversa ou memória persistente.
+O prompt está versionado em `agents/executive/assistant.py`. Ele orienta o agente
+a fundamentar números nas ferramentas, distinguir quantidade de taxa e reconhecer
+que o dataset é histórico. Esta etapa não implementa previsões, monitoramento
+operacional, ações logísticas nem comunicação entre os três agentes.
+
+A execução limita-se a seis turnos do SDK e 1500 tokens de saída por chamada do
+modelo, com timeout total configurável. O cliente não faz retries automáticos.
+Tracing está desabilitado e as chamadas usam `store=false`. Perguntas e resultados
+agregados das ferramentas são enviados à OpenAI; os CSVs completos não são enviados.
+Chamadas reais utilizam a conta e os créditos da chave configurada.
+
+Sem chave/modelo ou banco configurado, a rota retorna 503. Falhas do provedor ou
+limite de turnos retornam 502; timeout total retorna 504, sem detalhes sensíveis.
+Uma conexão configurada, mas indisponível, é detectada quando a ferramenta a usa.
+
+Referências de implementação: [quickstart oficial](https://developers.openai.com/api/docs/quickstart),
+[Agents SDK](https://openai.github.io/openai-agents-python/quickstart/) e
+[configuração do SDK](https://openai.github.io/openai-agents-python/config/).
 
 ## Verificar
 
@@ -309,6 +359,11 @@ configurações, a precedência das variáveis e a desativação da documentaç�
 Também cobrem configuração do banco, sessões, encerramento, chaves históricas e
 geração do SQL de criação/reversão, validação dos CSVs e comportamento do comando.
 Por padrão, não fazem chamadas a serviços externos.
+
+Os testes do Executivo usam modelo local simulado: não consomem créditos nem
+chamam a OpenAI. Com o banco de testes configurado, exercitam o Runner real do SDK,
+as duas ferramentas, as consultas SQL e a resposta HTTP com evidências. Também
+verificam configuração ausente, validação de entrada e erros sanitizados.
 
 Para executar os testes de integração, configure `TEST_DATABASE_URL` para um
 **banco exclusivo de testes**. Exemplo no PowerShell, após criar um banco vazio
@@ -360,8 +415,8 @@ intelligent-marketplace-api/
 └── README.md
 ```
 
-Os diretórios de agentes e serviços reservam responsabilidades para etapas
-posteriores. O projeto não depende de arquivos fora desta pasta.
+Logístico e Jornada do Cliente reservam responsabilidades para etapas posteriores.
+O projeto não depende de arquivos fora desta pasta.
 
 ## Convenções
 
@@ -374,5 +429,6 @@ posteriores. O projeto não depende de arquivos fora desta pasta.
 
 ## Próximo passo
 
-Integrar ferramentas de consulta à IA, utilizando as definições dos indicadores.
-Consultas analíticas dinâmicas, acompanhamento e agentes terão commits separados.
+Validar perguntas e respostas do Executivo com um modelo real configurado.
+Ampliar a capacidade analítica e implementar os agentes especialistas e sua
+orquestração em commits separados.

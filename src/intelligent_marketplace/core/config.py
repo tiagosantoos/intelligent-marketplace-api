@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     database_url: SecretStr | None = None
     database_connect_timeout_seconds: int = Field(default=5, ge=1, le=30)
     analytics_query_timeout_seconds: int = Field(default=5, ge=1, le=30)
+    openai_api_key: SecretStr | None = None
+    openai_model: str | None = None
+    agent_timeout_seconds: int = Field(default=60, ge=1, le=120)
+
+    @field_validator("openai_api_key", "openai_model", mode="before")
+    @classmethod
+    def empty_openai_setting(cls, value):
+        raw = value.get_secret_value() if isinstance(value, SecretStr) else value
+        return None if raw is None or not raw.strip() else raw.strip()
 
     @field_validator("database_url", mode="before")
     @classmethod
