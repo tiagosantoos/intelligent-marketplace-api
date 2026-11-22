@@ -11,7 +11,8 @@ commit específico para cada entrega.
 
 API HTTP em Python com FastAPI e Uvicorn. Inclui configuração por ambiente,
 conexão opcional ao PostgreSQL com SQLAlchemy, documentação OpenAPI e testes.
-Não há tabelas, importação do dataset ou agentes implementados nesta etapa.
+Inclui migração para nove tabelas históricas. Importação do dataset e agentes
+ainda não estão implementados. As migrações são executadas separadamente da API.
 
 ## Executar localmente
 
@@ -105,8 +106,67 @@ Não publique a URL real. A configuração protege a representação da senha e 
 erros HTTP de conexão não expõem detalhes do driver.
 
 `/health/ready` verifica somente `SELECT 1`, não a existência dos schemas e tabelas.
-Migrações, os schemas `historical` e `application`, importação e ferramentas
-analíticas terão etapas próprias. Nenhuma consulta dinâmica de IA foi liberada.
+Nenhuma consulta dinâmica de IA foi liberada.
+
+## Migrações e tabelas históricas
+
+Com o PostgreSQL disponível e `DATABASE_URL` configurada, execute:
+
+```sh
+uv run alembic upgrade head
+uv run alembic current
+```
+
+A revisão `0001` cria o schema `historical` e nove tabelas vazias. O controle de
+versões fica em `public.alembic_version`. O usuário da conexão deve ter permissão
+para criar schemas e tabelas. Reexecutar `upgrade head` não reaplica revisões já
+registradas. A API não executa migrações automaticamente.
+
+| Tabela em `historical` | Chave primária |
+|---|---|
+| `customers` | `customer_id` |
+| `sellers` | `seller_id` |
+| `products` | `product_id` |
+| `orders` | `order_id` |
+| `order_items` | `order_id`, `order_item_id` |
+| `order_payments` | `order_id`, `payment_sequential` |
+| `order_reviews` | `review_id`, `order_id` |
+| `geolocation` | `geolocation_id` gerado pelo banco |
+| `product_category_name_translation` | `product_category_name` |
+
+Os campos do dataset mantêm seus nomes, inclusive `product_name_lenght` e
+`product_description_lenght`. Datas sem fuso na origem são `TIMESTAMP WITHOUT TIME
+ZONE`; não são convertidas implicitamente para UTC. Valores monetários utilizam
+`NUMERIC(14,2)`, prefixos de CEP são texto e coordenadas utilizam `NUMERIC(24,20)`.
+Campos ausentes na origem permanecem opcionais, sem preenchimento artificial.
+
+Avaliações não usam somente `review_id` como chave: esse identificador se repete.
+A combinação com `order_id` é única nos arquivos conferidos. Geolocalização recebe
+um identificador técnico para preservar ocorrências repetidas, sem considerar o
+prefixo de CEP único. A tradução de categoria não é uma chave estrangeira
+obrigatória, assim como os prefixos de CEP não apontam para uma linha única.
+
+As tabelas relacionam pedidos a clientes, itens a produtos e vendedores, e
+pagamentos e avaliações a pedidos. Índices apoiam esses cruzamentos, consultas
+por estado, cliente recorrente, categoria, status e datas. Não há exclusões em
+cascata. Os registros operacionais dos agentes ficarão no schema `application`
+em outra etapa; ele ainda não é criado.
+
+Para revisar o SQL sem conectar ao banco:
+
+```sh
+uv run alembic upgrade head --sql
+```
+
+O comando gera o SQL no terminal e não exige `DATABASE_URL`. Para criar revisões
+futuras, altere as definições em `infrastructure/models/historical.py`, gere uma
+revisão com `alembic revision --autogenerate -m "descricao"` contra um banco de
+desenvolvimento atualizado e revise o arquivo antes de aplicar. A revisão `0001`
+contém sua própria definição congelada, independente de alterações nos modelos.
+
+**Reversão:** `uv run alembic downgrade base` remove todas as tabelas históricas e
+seus dados. Utilize somente quando a remoção for intencional. A reversão não usa
+`CASCADE` para remover objetos inesperados.
 
 ## Verificar
 
@@ -116,25 +176,30 @@ uv run pytest
 
 Os testes verificam a resposta HTTP, o contrato do endpoint, a leitura das
 configurações, a precedência das variáveis e a desativação da documentação.
-Também cobrem conexão não configurada, tratamento de falhas, sessões e encerramento.
+Também cobrem configuração do banco, sessões, encerramento, chaves históricas e
+geração do SQL de criação e reversão das migrações.
 Por padrão, não fazem chamadas a serviços externos.
 
-Para verificar uma conexão real, configure `TEST_DATABASE_URL` explicitamente.
-Exemplo no PowerShell para o PostgreSQL local:
+Para executar os testes de integração, configure `TEST_DATABASE_URL` para um
+**banco exclusivo de testes**. Exemplo no PowerShell, após criar um banco vazio
+chamado `marketplace_test` no PostgreSQL local:
 
 ```powershell
-$env:TEST_DATABASE_URL = "postgresql+psycopg://marketplace:marketplace@localhost:5432/marketplace"
+$env:TEST_DATABASE_URL = "postgresql+psycopg://marketplace:marketplace@localhost:5432/marketplace_test"
 uv run pytest -m integration
 ```
 
-O teste de integração executa apenas `SELECT 1`; não cria ou apaga dados. Sem essa
-variável, ele é marcado como ignorado. Os demais testes não dependem do Docker.
+Um teste verifica `SELECT 1`; outro aplica e reverte a migração dentro de uma
+transação que é descartada ao final, comparando o schema real com os modelos. O
+segundo é ignorado se já houver schema histórico ou controle de migrações. Sem
+`TEST_DATABASE_URL`, ambos são ignorados. Os demais testes não dependem do Docker.
 
 ## Estrutura
 
 ```text
 intelligent-marketplace-api/
 ├── docs/                         # Decisões e documentação do backend
+├── migrations/                   # Revisões versionadas do banco
 ├── src/
 │   └── intelligent_marketplace/
 │       ├── main.py                # Criação da aplicação FastAPI
@@ -152,6 +217,7 @@ intelligent-marketplace-api/
 ├── .gitattributes
 ├── .gitignore
 ├── compose.yaml                    # PostgreSQL para desenvolvimento local
+├── alembic.ini                     # Ambiente de migrações, sem credenciais
 ├── pyproject.toml
 ├── uv.lock                         # Versões resolvidas das dependências
 └── README.md
@@ -171,5 +237,5 @@ posteriores. O projeto não depende de arquivos fora desta pasta.
 
 ## Próximo passo
 
-Definir as migrações e as tabelas do histórico. Importador, consultas analíticas,
-modelos de acompanhamento e agentes terão commits separados.
+Implementar o importador dos CSVs com validação e controle de reexecução. Consultas
+analíticas, modelos de acompanhamento e agentes terão commits separados.
