@@ -482,6 +482,18 @@ O projeto não depende de arquivos fora desta pasta.
 - Cada passo deve informar escopo, verificação e commit correspondente.
 - Mensagens de commit no formato `tipo(escopo): descrição`.
 
+## Métricas, guardrails e validação
+
+- [Definições dos indicadores](docs/metric-definitions.md): fórmulas, populações,
+  denominadores, filtros e interpretação de pedidos multivendedor.
+- [Mapa de guardrails](docs/guardrails.md): controles no backend, orientações de
+  prompt, cobertura existente e lacunas pendentes.
+- [Cenários de validação](docs/validation-scenarios.md): perguntas, resultados
+  esperados, critérios de aceitação e registro de avaliações do modelo real.
+
+Os testes com modelo simulado verificam integração e contratos; a validação
+semântica das respostas de um modelo real permanece uma etapa distinta.
+
 ## Próximo passo
 
 Validar perguntas e respostas do Executivo com um modelo real configurado.
