@@ -11,8 +11,9 @@ commit específico para cada entrega.
 
 API HTTP em Python com FastAPI e Uvicorn. Inclui configuração por ambiente,
 conexão opcional ao PostgreSQL com SQLAlchemy, documentação OpenAPI e testes.
-Inclui migração para nove tabelas históricas. Importação do dataset e agentes
-ainda não estão implementados. As migrações são executadas separadamente da API.
+Inclui nove tabelas históricas, controle técnico da carga e importador dos CSVs.
+Os agentes ainda não estão implementados. Migrações e importação são executadas
+separadamente da API.
 
 ## Executar localmente
 
@@ -117,8 +118,9 @@ uv run alembic upgrade head
 uv run alembic current
 ```
 
-A revisão `0001` cria o schema `historical` e nove tabelas vazias. O controle de
-versões fica em `public.alembic_version`. O usuário da conexão deve ter permissão
+A revisão `0001` cria o schema `historical` e nove tabelas vazias. A revisão `0002`
+acrescenta `historical.dataset_imports` para rastrear arquivos já carregados. O
+controle das migrações fica em `public.alembic_version`. O usuário deve ter permissão
 para criar schemas e tabelas. Reexecutar `upgrade head` não reaplica revisões já
 registradas. A API não executa migrações automaticamente.
 
@@ -168,6 +170,84 @@ contém sua própria definição congelada, independente de alterações nos mod
 seus dados. Utilize somente quando a remoção for intencional. A reversão não usa
 `CASCADE` para remover objetos inesperados.
 
+## Importar o dataset
+
+Forneça uma pasta com os nove CSVs originais. Os arquivos não precisam estar
+dentro do repositório e não são copiados, alterados ou publicados no Git.
+
+Primeiro, confira os arquivos sem acessar o banco:
+
+```sh
+uv run marketplace-import --source-dir CAMINHO_DOS_CSVS --validate-only
+```
+
+Depois, com `DATABASE_URL` configurada e as migrações aplicadas:
+
+```sh
+uv run alembic upgrade head
+uv run marketplace-import --source-dir CAMINHO_DOS_CSVS
+```
+
+Substitua `CAMINHO_DOS_CSVS` pelo caminho da pasta. Use aspas se houver espaços.
+`--batch-size` controla a quantidade de registros por lote (padrão 2000; máximo
+10000). O relatório JSON informa tabela, linhas e situação:
+
+- `validated`: arquivo conferido, sem acesso ao banco;
+- `imported`: dados e controle de carga confirmados na transação;
+- `skipped`: arquivo já carregado, com o mesmo checksum e contagem no banco.
+
+O comando exige todos os arquivos abaixo e respeita a ordem das dependências:
+
+| Arquivo de origem | Tabela de destino |
+|---|---|
+| `olist_customers_dataset.csv` | `historical.customers` |
+| `olist_sellers_dataset.csv` | `historical.sellers` |
+| `product_category_name_translation.csv` | `historical.product_category_name_translation` |
+| `olist_products_dataset.csv` | `historical.products` |
+| `olist_orders_dataset.csv` | `historical.orders` |
+| `olist_order_items_dataset.csv` | `historical.order_items` |
+| `olist_order_payments_dataset.csv` | `historical.order_payments` |
+| `olist_order_reviews_dataset.csv` | `historical.order_reviews` |
+| `olist_geolocation_dataset.csv` | `historical.geolocation` |
+
+### Validação e preservação da origem
+
+A leitura usa UTF-8 com suporte a BOM, preservando comentários com aspas, vírgulas
+e quebras de linha. São verificados cabeçalhos, tipos, comprimentos, precisão
+decimal, campos obrigatórios e chaves compostas repetidas. Valores vazios em
+campos opcionais viram `NULL`; não são inventadas datas ou características.
+Números inteiros escritos como `10.0` são aceitos sem arredondar valores como
+`10.5`. Dinheiro e coordenadas usam `Decimal`, sem conversão intermediária para
+`float`. Datas históricas mantêm o horário original, sem fuso presumido.
+
+Erros de conversão identificam arquivo, linha e campo sem exibir o conteúdo do
+registro. A validação interrompe no primeiro erro. `--validate-only` verifica os
+arquivos, mas não garante integridade referencial entre eles; as chaves
+estrangeiras são verificadas pelo PostgreSQL durante a carga.
+
+### Reexecução e atomicidade
+
+Cada tabela possui um registro técnico com checksum SHA-256 do arquivo, quantidade
+de linhas e momento da importação. A mesma carga é ignorada na reexecução. Isso
+preserva todas as ocorrências originais de geolocalização, inclusive linhas
+idênticas, sem confundi-las com uma segunda execução do comando.
+
+Um arquivo com bytes diferentes de uma carga anterior é bloqueado, mesmo que a
+diferença seja apenas de formatação. Tabelas com dados e sem controle de carga, ou
+com contagens divergentes, também são bloqueadas. Não há substituição automática,
+`TRUNCATE` ou descarte silencioso de registros. Esse controle pressupõe que as
+tabelas históricas não sejam editadas diretamente; ele não detecta alterações
+manuais de conteúdo que mantenham a mesma quantidade de linhas.
+
+A carga dos nove arquivos utiliza uma única transação. Lotes limitam o consumo de
+memória, mas não são confirmados separadamente. Uma falha desfaz o trabalho da
+execução, preservando cargas anteriores. Um bloqueio transacional impede duas
+execuções simultâneas do importador no mesmo banco. O checksum é conferido antes e
+depois da leitura para detectar alterações dos arquivos durante o processo.
+
+O código de saída é `0` em sucesso, `2` em erro de arquivo/configuração e `1` em
+falha de banco. Nenhuma carga é iniciada automaticamente ao subir a API.
+
 ## Verificar
 
 ```sh
@@ -177,7 +257,7 @@ uv run pytest
 Os testes verificam a resposta HTTP, o contrato do endpoint, a leitura das
 configurações, a precedência das variáveis e a desativação da documentação.
 Também cobrem configuração do banco, sessões, encerramento, chaves históricas e
-geração do SQL de criação e reversão das migrações.
+geração do SQL de criação/reversão, validação dos CSVs e comportamento do comando.
 Por padrão, não fazem chamadas a serviços externos.
 
 Para executar os testes de integração, configure `TEST_DATABASE_URL` para um
@@ -194,6 +274,12 @@ transação que é descartada ao final, comparando o schema real com os modelos.
 segundo é ignorado se já houver schema histórico ou controle de migrações. Sem
 `TEST_DATABASE_URL`, ambos são ignorados. Os demais testes não dependem do Docker.
 
+Também há testes de integração do importador: primeira carga, reexecução,
+preservação de duplicatas de origem, bloqueio de arquivo alterado e rollback por
+referência inexistente. Eles usam arquivos sintéticos pequenos e descartam a
+transação ao final. Requerem o mesmo banco exclusivo e vazio de testes; sem ele,
+são ignorados. Nenhum teste depende dos CSVs externos para executar.
+
 ## Estrutura
 
 ```text
@@ -203,6 +289,7 @@ intelligent-marketplace-api/
 ├── src/
 │   └── intelligent_marketplace/
 │       ├── main.py                # Criação da aplicação FastAPI
+│       ├── importing/             # Leitura, validação e comando de importação
 │       ├── agents/
 │       │   ├── customer_journey/   # Jornada do Cliente
 │       │   ├── executive/          # Executivo e Orquestrador
@@ -237,5 +324,5 @@ posteriores. O projeto não depende de arquivos fora desta pasta.
 
 ## Próximo passo
 
-Implementar o importador dos CSVs com validação e controle de reexecução. Consultas
-analíticas, modelos de acompanhamento e agentes terão commits separados.
+Definir a camada de consultas e os indicadores antes de integrar a IA. Consultas
+analíticas dinâmicas, modelos de acompanhamento e agentes terão commits separados.

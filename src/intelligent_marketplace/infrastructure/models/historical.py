@@ -1,4 +1,4 @@
-"""Estrutura relacional dos nove CSVs de origem. Importação em etapa posterior."""
+"""Estrutura dos nove CSVs e controle técnico de importação."""
 
 import sqlalchemy as sa
 
@@ -100,4 +100,12 @@ geolocation = sa.Table(
     sa.Column("geolocation_lng", sa.Numeric(24, 20), nullable=False),
     sa.Column("geolocation_city", sa.Text, nullable=False),
     sa.Column("geolocation_state", sa.String(2), nullable=False),
+)
+
+dataset_imports = sa.Table(
+    "dataset_imports", metadata,
+    sa.Column("table_name", sa.String(64), primary_key=True),
+    sa.Column("file_sha256", sa.String(64), nullable=False),
+    sa.Column("row_count", sa.BigInteger, nullable=False),
+    sa.Column("imported_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
 )

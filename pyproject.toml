@@ -13,6 +13,9 @@ dependencies = [
     "uvicorn>=0.30,<1",
 ]
 
+[project.scripts]
+marketplace-import = "intelligent_marketplace.importing.cli:main"
+
 [dependency-groups]
 dev = [
     "httpx>=0.28,<1",
