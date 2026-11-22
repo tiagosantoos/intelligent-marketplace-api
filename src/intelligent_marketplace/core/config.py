@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     docs_enabled: bool = True
     database_url: SecretStr | None = None
     database_connect_timeout_seconds: int = Field(default=5, ge=1, le=30)
+    analytics_query_timeout_seconds: int = Field(default=5, ge=1, le=30)
 
     @field_validator("database_url", mode="before")
     @classmethod

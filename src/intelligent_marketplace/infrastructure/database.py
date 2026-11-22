@@ -6,6 +6,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
 
 from intelligent_marketplace.core.config import Settings
 
@@ -56,3 +57,21 @@ def get_session(request: Request) -> Iterator[Session]:
         raise HTTPException(status_code=503, detail="Database is not configured")
     with database.session_factory() as session:
         yield session
+
+
+def get_analytics_session(request: Request) -> Iterator[Session]:
+    """Transação de leitura com timeout, também obrigatório para ferramentas futuras."""
+    database = get_database(request)
+    if database.session_factory is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    try:
+        with database.session_factory() as session:
+            with session.begin():
+                session.execute(text("SET TRANSACTION READ ONLY"))
+                session.execute(
+                    text("SELECT set_config('statement_timeout', :timeout, true)"),
+                    {"timeout": f"{request.app.state.settings.analytics_query_timeout_seconds}s"},
+                )
+                yield session
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="Analytics are temporarily unavailable") from None

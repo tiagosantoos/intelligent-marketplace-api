@@ -12,6 +12,7 @@ commit específico para cada entrega.
 API HTTP em Python com FastAPI e Uvicorn. Inclui configuração por ambiente,
 conexão opcional ao PostgreSQL com SQLAlchemy, documentação OpenAPI e testes.
 Inclui nove tabelas históricas, controle técnico da carga e importador dos CSVs.
+Disponibiliza consultas de vendas por vendedor e atrasos por estado de destino.
 Os agentes ainda não estão implementados. Migrações e importação são executadas
 separadamente da API.
 
@@ -41,6 +42,7 @@ O `.env` é local e não entra no Git.
 | `DOCS_ENABLED` | `true` | Habilitar `/docs`, `/redoc` e `/openapi.json` |
 | `DATABASE_URL` | Não configurada | URL `postgresql+psycopg://usuario:senha@host:porta/banco` |
 | `DATABASE_CONNECT_TIMEOUT_SECONDS` | `5` | Limite de conexão e espera pelo pool, de 1 a 30 segundos |
+| `ANALYTICS_QUERY_TIMEOUT_SECONDS` | `5` | Limite por comando analítico no PostgreSQL, de 1 a 30 segundos |
 
 As variáveis do processo prevalecem sobre o `.env`; valores não definidos usam o
 padrão. O `.env` é procurado no diretório de execução, por isso inicie a API pela
@@ -248,6 +250,54 @@ depois da leitura para detectar alterações dos arquivos durante o processo.
 O código de saída é `0` em sucesso, `2` em erro de arquivo/configuração e `1` em
 falha de banco. Nenhuma carga é iniciada automaticamente ao subir a API.
 
+## Consultas históricas
+
+Após aplicar as migrações e importar os dados, consulte pela documentação `/docs`:
+
+| Rota GET | Finalidade | Ordenação (`sort_by`) |
+|---|---|---|
+| `/api/v1/analytics/sellers` | Vendas por vendedor | `order_count` (padrão), `item_count`, `item_revenue` |
+| `/api/v1/analytics/delivery-by-state` | Atrasos por estado de destino | `late_order_count` (padrão), `late_rate_percent` |
+
+Ambas aceitam `start_date` e `end_date` no formato `YYYY-MM-DD`, filtrando a data
+da compra, com limites inclusivos. `limit` tem padrão 10 e máximo 50. A resposta
+inclui origem, definição do indicador, filtros aplicados e resultados. Ausência
+de resultados retorna uma lista vazia; indisponibilidade do banco retorna 503.
+
+**Vendas:** considera pedidos com status `delivered` e itens registrados. Conta
+pedidos distintos por vendedor, itens e soma dos preços em BRL, excluindo frete.
+O valor não representa lucro ou faturamento fiscal. Um pedido com vários
+vendedores conta uma vez para cada vendedor participante; a soma dessas contagens
+pode superar o total de pedidos do marketplace. Pagamentos e avaliações não
+entram no cruzamento, evitando multiplicar valores.
+
+**Atrasos:** considera pedidos `delivered` com datas de entrega e previsão
+preenchidas. A entrega é atrasada quando seu dia de calendário supera o dia
+prometido. A taxa divide os atrasados pelos pedidos elegíveis do estado e
+multiplica por 100. A resposta informa esse denominador e arredonda a taxa para
+duas casas; a ordenação usa a taxa sem arredondamento. `min_delivered_orders`
+(padrão 1) permite excluir estados com amostras pequenas. Quantidade e taxa podem
+produzir rankings diferentes. Datas históricas permanecem sem conversão de fuso.
+
+Exemplos:
+
+```text
+/api/v1/analytics/sellers?sort_by=item_revenue&limit=5
+/api/v1/analytics/delivery-by-state?sort_by=late_rate_percent&min_delivered_orders=100
+/api/v1/analytics/delivery-by-state?start_date=2018-01-01&end_date=2018-12-31
+```
+
+Valores decimais são strings JSON para preservar precisão. As consultas usam
+parâmetros validados, transações somente de leitura e timeout local por comando.
+Não aceitam SQL fornecido pelo cliente. Essas rotas estabelecem definições
+verificáveis para futuras ferramentas dos agentes; ainda não há IA ou perguntas
+em linguagem natural implementadas. A API local ainda não tem autenticação;
+a integração futura deverá definir os acessos e permissões do usuário de banco
+usado pelos agentes.
+
+Os testes analíticos verificam pedidos com múltiplos itens e vendedores, filtros,
+taxas, denominadores e proteção contra escrita no PostgreSQL temporário.
+
 ## Verificar
 
 ```sh
@@ -324,5 +374,5 @@ posteriores. O projeto não depende de arquivos fora desta pasta.
 
 ## Próximo passo
 
-Definir a camada de consultas e os indicadores antes de integrar a IA. Consultas
-analíticas dinâmicas, modelos de acompanhamento e agentes terão commits separados.
+Integrar ferramentas de consulta à IA, utilizando as definições dos indicadores.
+Consultas analíticas dinâmicas, acompanhamento e agentes terão commits separados.

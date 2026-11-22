@@ -1,1 +1,1 @@
-"""Casos de uso da aplicação: implementação em etapa posterior."""
+"""Casos de uso e contratos analíticos da aplicação."""
