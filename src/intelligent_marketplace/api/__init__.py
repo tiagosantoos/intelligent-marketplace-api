@@ -1,1 +1,1 @@
-"""Interface HTTP: implementação em etapa posterior."""
+"""Rotas da interface HTTP."""
