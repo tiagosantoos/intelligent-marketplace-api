@@ -4,14 +4,9 @@ import pytest
 from intelligent_marketplace.main import create_app
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
 @pytest.mark.anyio
-async def test_health_returns_ok():
-    transport = httpx.ASGITransport(app=create_app())
+async def test_health_returns_ok(app_settings):
+    transport = httpx.ASGITransport(app=create_app(app_settings))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/health")
 
@@ -20,8 +15,8 @@ async def test_health_returns_ok():
 
 
 @pytest.mark.anyio
-async def test_openapi_exposes_health_contract():
-    transport = httpx.ASGITransport(app=create_app())
+async def test_openapi_exposes_health_contract(app_settings):
+    transport = httpx.ASGITransport(app=create_app(app_settings))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/openapi.json")
 

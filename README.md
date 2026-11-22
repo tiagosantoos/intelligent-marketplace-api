@@ -10,7 +10,7 @@ commit específico para cada entrega.
 ## Estado atual
 
 API HTTP inicial em Python com FastAPI e Uvicorn. Inclui um endpoint de saúde,
-documentação OpenAPI e testes locais. Banco de dados e agentes ainda não estão
+documentação OpenAPI, configuração por ambiente e testes locais. Banco e agentes ainda não estão
 implementados. Não é necessário configurar credenciais para executar esta etapa.
 
 ## Executar localmente
@@ -25,6 +25,27 @@ uv run uvicorn intelligent_marketplace.main:app --reload --host 127.0.0.1 --port
 
 O primeiro comando cria o ambiente `.venv` e instala as dependências nas versões
 registradas em `uv.lock`. O modo `--reload` destina-se ao desenvolvimento local.
+
+## Configuração por ambiente
+
+A API funciona sem `.env`, utilizando os valores padrão. Para personalizar, copie
+`.env.example` para `.env` na raiz do repositório, caso esse arquivo ainda não exista.
+O `.env` é local e não entra no Git.
+
+| Variável | Padrão | Finalidade |
+|---|---|---|
+| `APP_NAME` | `Intelligent Marketplace API` | Nome exibido na documentação |
+| `APP_ENV` | `development` | Identificação do ambiente: `development`, `test` ou `production` |
+| `DOCS_ENABLED` | `true` | Habilitar `/docs`, `/redoc` e `/openapi.json` |
+
+As variáveis do processo prevalecem sobre o `.env`; valores não definidos usam o
+padrão. O `.env` é procurado no diretório de execução, por isso inicie a API pela
+raiz do repositório. Valores inválidos nas configurações reconhecidas impedem a
+inicialização. Reinicie a API após alterar a configuração.
+
+`APP_ENV` identifica o ambiente e não aplica configurações de implantação
+automaticamente. `DOCS_ENABLED=false` desabilita somente a documentação, mantendo
+`/health` disponível. As configurações ficam em `core/config.py`.
 
 | Endereço | Finalidade |
 |---|---|
@@ -47,7 +68,8 @@ disponibilidade de banco, agentes ou outros serviços.
 uv run pytest
 ```
 
-Os testes verificam a resposta HTTP e a publicação do contrato do endpoint.
+Os testes verificam a resposta HTTP, o contrato do endpoint, a leitura das
+configurações, a precedência das variáveis e a desativação da documentação.
 Não fazem chamadas de rede externas.
 
 ## Estrutura
@@ -68,6 +90,7 @@ intelligent-marketplace-api/
 │       └── services/               # Casos de uso da aplicação
 ├── tests/                          # Testes do backend
 ├── .editorconfig
+├── .env.example                    # Exemplo de configuração sem segredos
 ├── .gitattributes
 ├── .gitignore
 ├── pyproject.toml
@@ -89,5 +112,5 @@ para etapas posteriores. O projeto não depende de arquivos fora desta pasta.
 
 ## Próximo passo
 
-Definir a configuração da aplicação e das variáveis de ambiente. Banco, agentes e
-hospedagem terão etapas próprias, com commits separados.
+Definir a configuração e a conexão com o banco de dados. Modelos de negócio,
+agentes e hospedagem terão etapas próprias, com commits separados.

@@ -1,1 +1,1 @@
-"""Configurações compartilhadas: implementação em etapa posterior."""
+"""Configurações compartilhadas da aplicação."""
