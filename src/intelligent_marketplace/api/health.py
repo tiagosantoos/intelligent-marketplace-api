@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
+from intelligent_marketplace.api.security import require_api_key
 
 from intelligent_marketplace.infrastructure.database import (
     Database,
@@ -35,6 +36,7 @@ async def health() -> HealthResponse:
     response_model=ReadinessResponse,
     summary="Verificar a conexão com o banco",
     responses={503: {"description": "Banco não configurado ou indisponível"}},
+    dependencies=[Depends(require_api_key)],
 )
 def readiness(database: Annotated[Database, Depends(get_database)]) -> ReadinessResponse:
     """Verifica somente a conexão, sem validar schemas ou tabelas nesta etapa.

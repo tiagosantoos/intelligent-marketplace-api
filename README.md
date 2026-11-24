@@ -48,14 +48,17 @@ O `.env` é local e não entra no Git.
 | `OPENAI_API_KEY` | Não configurada | Chave secreta da API OpenAI |
 | `OPENAI_MODEL` | Não configurado | Identificador do modelo com suporte a ferramentas disponível na conta |
 | `AGENT_TIMEOUT_SECONDS` | `60` | Limite total da execução do agente, de 1 a 120 segundos |
+| `API_ACCESS_KEY` | Não configurada | Chave própria de acesso, de 32 a 256 caracteres; obrigatória em `production` |
+| `EXECUTIVE_REQUESTS_PER_MINUTE` | `6` | Limite de requisições autenticadas ao Executivo por minuto e processo |
+| `EXECUTIVE_MAX_CONCURRENT` | `1` | Limite de execuções simultâneas do Executivo por processo |
 
 As variáveis do processo prevalecem sobre o `.env`; valores não definidos usam o
 padrão. O `.env` é procurado no diretório de execução, por isso inicie a API pela
 raiz do repositório. Valores inválidos nas configurações reconhecidas impedem a
 inicialização. Reinicie a API após alterar a configuração.
 
-`APP_ENV` identifica o ambiente e não aplica configurações de implantação
-automaticamente. `DOCS_ENABLED=false` desabilita somente a documentação, mantendo
+`APP_ENV=production` exige `API_ACCESS_KEY`; as demais opções de implantação
+continuam explícitas. `DOCS_ENABLED=false` desabilita somente a documentação, mantendo
 `/health` disponível. As configurações ficam em `core/config.py`.
 
 | Endereço | Finalidade |
@@ -295,9 +298,25 @@ Exemplos:
 Valores decimais são strings JSON para preservar precisão. As consultas usam
 parâmetros validados, transações somente de leitura e timeout local por comando.
 Não aceitam SQL fornecido pelo cliente. Essas rotas estabelecem definições
-verificáveis para as ferramentas do Executivo. A API local ainda não tem autenticação;
-a integração futura deverá definir os acessos e permissões do usuário de banco
-usado pelos agentes.
+verificáveis para as ferramentas do Executivo. Uma chave compartilhada permite
+proteger o acesso da demonstração; permissões próprias do usuário de banco ainda
+devem ser configuradas no ambiente hospedado.
+
+## Proteção inicial da API
+
+Com `API_ACCESS_KEY` definida, envie-a no cabeçalho `X-API-Key` para consultas,
+Executivo e `/health/ready`. `/health` permanece público e não consulta o banco.
+No Swagger, use **Authorize**. A chave deve ser diferente de `OPENAI_API_KEY`;
+nunca distribua a chave da OpenAI aos consumidores da API. Sem chave em ambiente
+local, o acesso continua livre; em `production`, a aplicação recusa iniciar.
+
+O Executivo autenticado aceita por padrão seis requisições por minuto, com uma
+execução por vez. Excesso retorna HTTP 429 e `Retry-After`; uma falha libera a
+vaga de execução, mas conta no limite da janela. São limites em memória de um
+processo, reiniciados no redeploy/restart, não um controle financeiro ou por
+usuário. Utilize um único worker na demonstração. Ainda não há contas individuais,
+rate limit distribuído ou auditoria persistente. A documentação pode ser desligada
+no deploy por `DOCS_ENABLED=false`.
 
 Os testes analíticos verificam pedidos com múltiplos itens e vendedores, filtros,
 taxas, denominadores e proteção contra escrita no PostgreSQL temporário.

@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -25,12 +25,24 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str | None = None
     agent_timeout_seconds: int = Field(default=60, ge=1, le=120)
+    api_access_key: SecretStr | None = Field(default=None, min_length=32, max_length=256)
+    executive_requests_per_minute: int = Field(default=6, ge=1, le=60)
+    executive_max_concurrent: int = Field(default=1, ge=1, le=5)
 
-    @field_validator("openai_api_key", "openai_model", mode="before")
+    @field_validator("openai_api_key", "openai_model", "api_access_key", mode="before")
     @classmethod
     def empty_openai_setting(cls, value):
         raw = value.get_secret_value() if isinstance(value, SecretStr) else value
         return None if raw is None or not raw.strip() else raw.strip()
+
+    @model_validator(mode="after")
+    def require_public_access_key(self):
+        if self.app_env == "production" and self.api_access_key is None:
+            raise ValueError("API_ACCESS_KEY is required in production")
+        if self.api_access_key is not None and self.openai_api_key is not None:
+            if self.api_access_key.get_secret_value() == self.openai_api_key.get_secret_value():
+                raise ValueError("API_ACCESS_KEY must differ from OPENAI_API_KEY")
+        return self
 
     @field_validator("database_url", mode="before")
     @classmethod

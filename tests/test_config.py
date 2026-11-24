@@ -11,6 +11,7 @@ def clear_settings_environment(monkeypatch):
     for name in (
         "APP_NAME", "APP_ENV", "DOCS_ENABLED", "DATABASE_URL",
         "DATABASE_CONNECT_TIMEOUT_SECONDS",
+        "API_ACCESS_KEY", "OPENAI_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -31,6 +32,7 @@ def test_environment_overrides_dotenv(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("API_ACCESS_KEY", "a" * 32)
 
     settings = Settings(_env_file=dotenv)
 

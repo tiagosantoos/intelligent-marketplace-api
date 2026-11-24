@@ -3,12 +3,13 @@
 from contextlib import asynccontextmanager
 from importlib.metadata import version
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from starlette.concurrency import run_in_threadpool
 
 from intelligent_marketplace.api.health import router as health_router
 from intelligent_marketplace.api.analytics import router as analytics_router
 from intelligent_marketplace.api.executive import router as executive_router
+from intelligent_marketplace.api.security import ExecutiveLimits, protect_executive, require_api_key
 from intelligent_marketplace.core.config import Settings
 from intelligent_marketplace.infrastructure.database import Database
 
@@ -36,9 +37,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.state.settings = settings
     application.state.database = database
+    application.state.executive_limits = ExecutiveLimits(settings.executive_requests_per_minute, settings.executive_max_concurrent)
     application.include_router(health_router)
-    application.include_router(analytics_router)
-    application.include_router(executive_router)
+    application.include_router(analytics_router, dependencies=[Depends(require_api_key)])
+    application.include_router(executive_router, dependencies=[Depends(protect_executive)])
     return application
 
 

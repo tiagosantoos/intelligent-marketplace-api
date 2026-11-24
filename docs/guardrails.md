@@ -24,6 +24,13 @@ orientação ao modelo: requer avaliação e não é uma garantia técnica de co
 | G13 | Tratar falhas sem fabricar resposta | Backend + prompt | Configuração ausente: 503; falha SQL tratada: 503; falha do provedor/turnos: 502; timeout total: 504. Lista vazia não é erro | Testes de banco, Executivo e ausência de resultados |
 | G14 | Permitir correção autônoma do plano | Backend + modelo | Plano inválido retorna orientação para reformulação, dentro dos limites da execução | Caso `RecoveringPlanModel` no teste flexível do Executivo |
 | G15 | Apresentar linguagem compreensível | Prompt | Nome do estado com sigla na explicação; sigla mantida nos filtros e evidências. Não há formatador determinístico da prosa | Cenário V02 |
+| G16 | Restringir acesso à demonstração | Backend, parcial | `X-API-Key` em análises, Executivo e readiness quando configurada; chave obrigatória em `production`, distinta da OpenAI. Não substitui identidades e permissões individuais | `test_api_security.py` |
+
+O limite inicial do Executivo autenticado é de seis requisições/minuto e uma
+execução simultânea, configurável. O controle é local ao processo e se reinicia
+com o serviço; não controla gasto agregado nem protege todo o tráfego HTTP.
+Somente `/health` é mantido público independentemente da chave; a documentação
+também fica pública se explicitamente habilitada.
 
 Arquivos de referência: [agente e prompt](../src/intelligent_marketplace/agents/executive/assistant.py),
 [sessões de leitura](../src/intelligent_marketplace/infrastructure/database.py),
@@ -55,7 +62,7 @@ permanecem fora do escopo acordado.
 |---|---|---|
 | Antes de ampliar a confiança no modelo real | Há duas rodadas exploratórias de 14 perguntas, com revisão assistida, dados pequenos e sem repetições por versão | Ampliar formulações/amostras, repetir execuções e obter revisão humana |
 | Antes de ampliar o uso | ID válido não garante pertinência; o backend aceita uma resposta com `evidence_ids=[]` e não identifica números sem suporte | Definir validação de fundamentação e política de resposta sem evidências |
-| Antes de publicar a API | Não há autenticação, autorização, limite de requisições ou usuário de banco dedicado à leitura | Definir identidades, permissões, rate limit e segregação das credenciais de migração/importação |
+| Antes de ampliar a publicação | Há chave compartilhada e limite do Executivo por processo; faltam identidades individuais, limites persistentes/distribuídos e segregação do usuário de banco | Usar credenciais de banco próprias para runtime e definir autenticação/auditoria conforme o público |
 | Antes de auditar execuções | Evidências existem somente na resposta e no contexto temporário; não há trilha persistente de execução | Registrar versão do prompt, modelo, plano, fontes, duração e resultado com política de dados sensíveis |
 | Antes de prometer controle de custo | Limites por execução não controlam orçamento agregado | Medir tokens/custo e estabelecer orçamento e concorrência |
 | Antes de comparar rankings entre rotas | Arredondamento na ordenação difere entre plano flexível e rota simples por estado | Harmonizar ordenação antes de exigir resultados idênticos em empates aproximados |
