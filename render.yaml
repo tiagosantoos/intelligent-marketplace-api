@@ -3,6 +3,7 @@ services:
     name: intelligent-marketplace-api
     runtime: docker
     plan: free
+    region: virginia
     dockerfilePath: ./Dockerfile
     dockerContext: .
     autoDeployTrigger: "off"

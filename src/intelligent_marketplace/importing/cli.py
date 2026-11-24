@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
             report = [{"table": p.table_name, "rows": p.row_count, "status": "validated"} for p in plans]
             mode = "validation"
         else:
-            database = Database(Settings())
+            database = Database(Settings(), use_unpooled=True)
             if database.engine is None:
                 raise DatasetError("Configure DATABASE_URL para importar; --validate-only não exige banco")
             with database.engine.begin() as connection:

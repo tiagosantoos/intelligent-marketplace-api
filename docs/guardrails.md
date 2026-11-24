@@ -25,6 +25,7 @@ orientação ao modelo: requer avaliação e não é uma garantia técnica de co
 | G14 | Permitir correção autônoma do plano | Backend + modelo | Plano inválido retorna orientação para reformulação, dentro dos limites da execução | Caso `RecoveringPlanModel` no teste flexível do Executivo |
 | G15 | Apresentar linguagem compreensível | Prompt | Nome do estado com sigla na explicação; sigla mantida nos filtros e evidências. Não há formatador determinístico da prosa | Cenário V02 |
 | G16 | Restringir acesso à demonstração | Backend, parcial | `X-API-Key` em análises, Executivo e readiness quando configurada; chave obrigatória em `production`, distinta da OpenAI. Não substitui identidades e permissões individuais | `test_api_security.py` |
+| G17 | Separar leitura de administração no Neon | Banco + backend | API com role `marketplace_runtime` de leitura em `historical`; migrações/importação usam URL direta administrativa separada. Novos schemas operacionais exigirão política própria | `test_deployment.py`, `test_neon_configuration.py` e verificação real em `neon-setup.md` |
 
 O limite inicial do Executivo autenticado é de seis requisições/minuto e uma
 execução simultânea, configurável. O controle é local ao processo e se reinicia
@@ -62,7 +63,7 @@ permanecem fora do escopo acordado.
 |---|---|---|
 | Antes de ampliar a confiança no modelo real | Há duas rodadas exploratórias de 14 perguntas, com revisão assistida, dados pequenos e sem repetições por versão | Ampliar formulações/amostras, repetir execuções e obter revisão humana |
 | Antes de ampliar o uso | ID válido não garante pertinência; o backend aceita uma resposta com `evidence_ids=[]` e não identifica números sem suporte | Definir validação de fundamentação e política de resposta sem evidências |
-| Antes de ampliar a publicação | Há chave compartilhada e limite do Executivo por processo; faltam identidades individuais, limites persistentes/distribuídos e segregação do usuário de banco | Usar credenciais de banco próprias para runtime e definir autenticação/auditoria conforme o público |
+| Antes de ampliar a publicação | Há chave compartilhada, limite do Executivo por processo e role de leitura no Neon; faltam identidades individuais e limites persistentes/distribuídos | Definir autenticação/auditoria conforme o público e revisar privilégios quando houver escrita operacional |
 | Antes de auditar execuções | Evidências existem somente na resposta e no contexto temporário; não há trilha persistente de execução | Registrar versão do prompt, modelo, plano, fontes, duração e resultado com política de dados sensíveis |
 | Antes de prometer controle de custo | Limites por execução não controlam orçamento agregado | Medir tokens/custo e estabelecer orçamento e concorrência |
 | Antes de comparar rankings entre rotas | Arredondamento na ordenação difere entre plano flexível e rota simples por estado | Harmonizar ordenação antes de exigir resultados idênticos em empates aproximados |

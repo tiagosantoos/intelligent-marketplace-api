@@ -27,7 +27,7 @@ def test_database_url_is_optional_and_secret():
 
 @pytest.mark.parametrize(
     "url",
-    ["invalid", "sqlite:///local.db", "postgresql://user:pass@localhost/db"],
+    ["invalid", "sqlite:///local.db", "postgresql+asyncpg://user:pass@localhost/db"],
 )
 def test_unsupported_database_urls_are_rejected(url):
     with pytest.raises(ValueError):

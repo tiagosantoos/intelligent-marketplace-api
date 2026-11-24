@@ -37,7 +37,7 @@ else:
     if external_connection is not None:
         run_with_connection(external_connection)
     else:
-        database = Database(Settings())
+        database = Database(Settings(), use_unpooled=True)
         if database.engine is None:
             raise RuntimeError("Configure DATABASE_URL antes de executar as migrações")
         try:

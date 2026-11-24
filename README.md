@@ -42,7 +42,8 @@ O `.env` é local e não entra no Git.
 | `APP_NAME` | `Intelligent Marketplace API` | Nome exibido na documentação |
 | `APP_ENV` | `development` | Identificação do ambiente: `development`, `test` ou `production` |
 | `DOCS_ENABLED` | `true` | Habilitar `/docs`, `/redoc` e `/openapi.json` |
-| `DATABASE_URL` | Não configurada | URL `postgresql+psycopg://usuario:senha@host:porta/banco` |
+| `DATABASE_URL` | Não configurada | Conexão da API; aceita URL padrão `postgresql://` do Neon ou `postgresql+psycopg://` |
+| `DATABASE_URL_UNPOOLED` | Não configurada | Conexão direta para Alembic/importação; fallback para `DATABASE_URL` |
 | `DATABASE_CONNECT_TIMEOUT_SECONDS` | `5` | Limite de conexão e espera pelo pool, de 1 a 30 segundos |
 | `ANALYTICS_QUERY_TIMEOUT_SECONDS` | `5` | Limite por comando analítico no PostgreSQL, de 1 a 30 segundos |
 | `OPENAI_API_KEY` | Não configurada | Chave secreta da API OpenAI |
@@ -527,6 +528,37 @@ leitura, variáveis secretas, criação do Blueprint e verificação pós-deploy
 `render.yaml` seleciona explicitamente o plano gratuito, gera a chave de acesso
 e deixa banco/OpenAI para preenchimento seguro no painel. `.env` e CSVs ficam
 fora da imagem. Migrações e importação são etapas separadas da inicialização.
+
+### Projeto Neon vinculado
+
+O CLI usa `.neon` (ignorado pelo Git) para vincular a branch `production` do projeto
+Neon escolhido. `neon.ts` declara somente PostgreSQL, com Auth desabilitado e sem
+Functions, Storage ou AI Gateway. Node/npm são ferramentas de configuração; o
+backend continua Python, SQLAlchemy e psycopg.
+
+```sh
+neon deploy
+npm run neon:runtime -- --branch production
+npm run build
+```
+
+`neon deploy` atualiza apenas variáveis gerenciadas pelo Neon no `.env` existente,
+incluindo as URLs pooled/direta. A configuração Python normaliza o driver sem
+reescrever senha ou parâmetros TLS. Alembic e o importador preferem
+`DATABASE_URL_UNPOOLED`. Após um novo deploy/env pull, `neon:runtime` verifica as
+permissões e seleciona a role `marketplace_runtime` para `DATABASE_URL`, sem
+exibir a URL nem alterar as outras variáveis. A role deve existir e ter SELECT no
+schema `historical`, sem escrita. `npm run build` executa `uv build` e gera os
+artefatos Python em `dist/`; não constrói um frontend.
+
+As skills oficiais `neon` e `neon-postgres` foram instaladas em `.agents/skills`,
+com origem fixada em `skills-lock.json`. O MCP está em `.codex/config.toml`, com
+OAuth, somente leitura e restrito ao projeto. Reabra o projeto no Codex para
+carregá-lo, se necessário; a autorização OAuth do MCP é solicitada no primeiro
+uso e é separada do login do CLI. Nenhuma API key está nesse arquivo. As demais
+configurações globais do Codex não foram substituídas.
+
+Detalhes e evidências desta configuração: [registro Neon](docs/neon-setup.md).
 
 Para conferir a imagem local sem credenciais reais:
 

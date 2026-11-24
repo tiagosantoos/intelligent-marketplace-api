@@ -29,8 +29,8 @@ O modelo é configurável e o template usa `gpt-5.4-mini`.
 1. Crie um projeto no plano **Free**, com banco e branch exclusivos para a demo.
 2. Em **Connect**, copie a conexão direta do proprietário para migrações/carga.
    Guarde-a localmente; não envie a URL no chat nem a publique no Git.
-3. Adapte somente o prefixo `postgresql://` para `postgresql+psycopg://`, exigido
-   pela aplicação. Preserve hostname, senha codificada e parâmetros TLS, incluindo
+3. A aplicação aceita `postgresql://` e normaliza internamente para o driver
+   `postgresql+psycopg://`. Preserve hostname, senha codificada e parâmetros TLS, incluindo
    `sslmode=require` e `channel_binding=require`, quando fornecidos pelo Neon.
 
 Exemplo sem credenciais reais:

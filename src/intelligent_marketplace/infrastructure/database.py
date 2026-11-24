@@ -17,13 +17,18 @@ class DatabaseNotConfiguredError(RuntimeError):
 
 
 class Database:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, *, use_unpooled: bool = False):
         self.engine: Engine | None = None
         self.session_factory: sessionmaker[Session] | None = None
-        if settings.database_url is not None:
+        database_url = (
+            settings.database_url_unpooled
+            if use_unpooled and settings.database_url_unpooled is not None
+            else settings.database_url
+        )
+        if database_url is not None:
             timeout = settings.database_connect_timeout_seconds
             self.engine = create_engine(
-                settings.database_url.get_secret_value(),
+                database_url.get_secret_value(),
                 pool_pre_ping=True,
                 pool_size=5,
                 max_overflow=5,

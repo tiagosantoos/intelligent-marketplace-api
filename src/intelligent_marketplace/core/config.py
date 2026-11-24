@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     docs_enabled: bool = True
     database_url: SecretStr | None = None
+    database_url_unpooled: SecretStr | None = None
     database_connect_timeout_seconds: int = Field(default=5, ge=1, le=30)
     analytics_query_timeout_seconds: int = Field(default=5, ge=1, le=30)
     openai_api_key: SecretStr | None = None
@@ -44,7 +45,7 @@ class Settings(BaseSettings):
                 raise ValueError("API_ACCESS_KEY must differ from OPENAI_API_KEY")
         return self
 
-    @field_validator("database_url", mode="before")
+    @field_validator("database_url", "database_url_unpooled", mode="before")
     @classmethod
     def validate_database_url(cls, value):
         if value is None or value == "":
@@ -52,10 +53,12 @@ class Settings(BaseSettings):
         raw = value.get_secret_value() if isinstance(value, SecretStr) else value
         try:
             url = make_url(raw)
+            if url.drivername in ("postgres", "postgresql"):
+                url = url.set(drivername="postgresql+psycopg")
             if url.drivername != "postgresql+psycopg" or not url.host or not url.database:
                 raise ValueError
         except (ArgumentError, TypeError, ValueError):
             raise ValueError(
-                "DATABASE_URL must use postgresql+psycopg:// with a host and database"
+                "Database URL must use postgresql:// or postgresql+psycopg:// with a host and database"
             ) from None
-        return value
+        return url.render_as_string(hide_password=False)
