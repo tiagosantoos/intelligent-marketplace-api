@@ -33,3 +33,8 @@ data/
 .vscode/
 .DS_Store
 Thumbs.db
+.neon
+node_modules/
+
+# Skills instaladas localmente; origem/versão ficam em skills-lock.json.
+.agents/skills/

@@ -1,0 +1,15 @@
+{
+  "dependencies": {
+    "@neon/config": "^1.14.6",
+    "@neon/env": "^2.1.9"
+  },
+  "name": "intelligent-marketplace-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Neon configuration and Python backend build commands",
+  "scripts": {
+    "build": "uv build",
+    "start": "uv run uvicorn intelligent_marketplace.main:app --host 127.0.0.1 --port 8010",
+    "neon:runtime": "uv run python scripts/neon_runtime_env.py"
+  }
+}
