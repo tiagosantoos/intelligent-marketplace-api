@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: intelligent-marketplace-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: "off"
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DOCS_ENABLED
+        value: "false"
+      - key: API_ACCESS_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5.4-mini
+      - key: DATABASE_CONNECT_TIMEOUT_SECONDS
+        value: "10"
+      - key: ANALYTICS_QUERY_TIMEOUT_SECONDS
+        value: "5"
+      - key: AGENT_TIMEOUT_SECONDS
+        value: "60"
+      - key: EXECUTIVE_REQUESTS_PER_MINUTE
+        value: "6"
+      - key: EXECUTIVE_MAX_CONCURRENT
+        value: "1"

@@ -1,0 +1,17 @@
+**
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!README.md
+!alembic.ini
+!src/
+!src/**
+!migrations/
+!migrations/**
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*
+**/*.pem
+**/*.key

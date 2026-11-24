@@ -517,9 +517,32 @@ O projeto não depende de arquivos fora desta pasta.
 Os testes com modelo simulado verificam integração e contratos; a validação
 semântica das respostas de um modelo real permanece uma etapa distinta.
 
+## Publicação inicial
+
+Destino escolhido: **Render Free** para a API e **Neon Free** para PostgreSQL.
+Veja o [guia de publicação](docs/deploy-render-neon.md) para carga local, role de
+leitura, variáveis secretas, criação do Blueprint e verificação pós-deploy.
+
+`Dockerfile` usa o `uv.lock` e executa um único worker como usuário sem privilégios.
+`render.yaml` seleciona explicitamente o plano gratuito, gera a chave de acesso
+e deixa banco/OpenAI para preenchimento seguro no painel. `.env` e CSVs ficam
+fora da imagem. Migrações e importação são etapas separadas da inicialização.
+
+Para conferir a imagem local sem credenciais reais:
+
+```sh
+docker build -t intelligent-marketplace-api:local .
+docker run --rm -p 127.0.0.1:10000:10000 intelligent-marketplace-api:local
+```
+
+Esse comando inicia em desenvolvimento, sem banco/modelo configurados, permitindo
+verificar `/health`. Para simular o deploy protegido, configure `APP_ENV=production`
+e `API_ACCESS_KEY` em um arquivo local ignorado e use `--env-file`; nunca coloque
+credenciais reais na linha de comando ou na imagem.
+
 ## Próximo passo
 
-Implementar os contratos de entrada/saída e a conferência factual do snapshot do
-Agente Logístico, conforme seu fluxo operacional documentado. A validação do
-Executivo deve continuar com mais formulações e revisão humana; as duas rodadas
-exploratórias registradas não demonstram robustez geral.
+Criar/configurar Neon e Render, aplicar a carga e verificar a primeira publicação
+do Executivo. Depois, retomar os contratos de entrada/saída e a conferência factual
+do snapshot do Agente Logístico, conforme seu fluxo documentado. As duas rodadas
+exploratórias registradas do Executivo não demonstram robustez geral.
